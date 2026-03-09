@@ -1,0 +1,11 @@
+{
+  "builds": [
+    {
+      "src": "bot/main.py",
+      "use": "@railway/python"
+    }
+  ],
+  "env": {
+    "PYTHON_VERSION": "3.11"
+  }
+}
