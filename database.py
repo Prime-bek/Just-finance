@@ -1,5 +1,6 @@
 import aiosqlite
 import datetime
+from typing import Optional, Dict, List, Any
 from typing import List, Dict, Any
 from config import DB_PATH
 
@@ -140,7 +141,6 @@ class Database:
                 return [dict(row) for row in await cur.fetchall()]
 
     async def get_wallet_by_name(self, user_id: int, name: str) -> Optional[Dict]:
-        """Проверка существования кошелька по имени"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
