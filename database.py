@@ -17,10 +17,19 @@ class Database:
                     username TEXT,
                     name TEXT,
                     language TEXT DEFAULT 'ru',
-                    currency TEXT DEFAULT 'RUB',
                     status TEXT DEFAULT 'active',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Настройки
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS settings (
+                    user_id INTEGER PRIMARY KEY,
+                    currency TEXT DEFAULT 'UZS',
+                    notifications BOOLEAN DEFAULT TRUE,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 )
             ''')
             
@@ -30,21 +39,24 @@ class Database:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
                     name TEXT,
-                    type TEXT,
+                    type TEXT DEFAULT 'main',
                     is_main BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 )
             ''')
             
-            # Операции
+            # Операции с date и time
             await db.execute('''
-                CREATE TABLE IF NOT EXISTS operations (
+                CREATE TABLE IF NOT EXISTS transactions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER,
                     wallet_id INTEGER,
                     type TEXT,
                     category TEXT,
                     amount REAL,
+                    date TEXT,
+                    time TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
                     FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE
@@ -62,16 +74,20 @@ class Database:
                 user = await cur.fetchone()
             
             if not user:
+                # Создаем пользователя
                 await db.execute(
                     "INSERT INTO users (user_id, username, name) VALUES (?, ?, ?)",
                     (user_id, username, name)
                 )
-                await db.commit()
-                
+                # Создаем настройки
+                await db.execute(
+                    "INSERT INTO settings (user_id) VALUES (?)",
+                    (user_id,)
+                )
                 # Создаем основной кошелек
                 await db.execute(
                     "INSERT INTO wallets (user_id, name, type, is_main) VALUES (?, ?, ?, ?)",
-                    (user_id, "💳 Основной" if True else "💳 Asosiy", "main", True)
+                    (user_id, "💳 Основной", "main", True)
                 )
                 await db.commit()
                 
@@ -87,27 +103,51 @@ class Database:
             
             return dict(user)
 
-    async def update_user_language(self, user_id: int, language: str):
+    async def get_user_settings(self, user_id: int) -> Dict:
+        """Получить настройки пользователя"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM settings WHERE user_id = ?", (user_id,)) as cur:
+                row = await cur.fetchone()
+                if row:
+                    return dict(row)
+                # Создаем настройки если нет
+                await db.execute("INSERT INTO settings (user_id) VALUES (?)", (user_id,))
+                await db.commit()
+                return {"user_id": user_id, "currency": "UZS", "notifications": True}
+
+    async def update_language(self, user_id: int, language: str):
         await db.execute("UPDATE users SET language = ? WHERE user_id = ?", (language, user_id))
         await db.commit()
 
-    async def update_user_currency(self, user_id: int, currency: str):
+    async def update_currency(self, user_id: int, currency: str):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("UPDATE users SET currency = ? WHERE user_id = ?", (currency, user_id))
+            await db.execute(
+                "INSERT INTO settings (user_id, currency) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET currency = ?",
+                (user_id, currency, currency)
+            )
             await db.commit()
 
-    async def update_user_status(self, user_id: int, status: str):
+    async def update_notifications(self, user_id: int, status: bool):
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("UPDATE users SET status = ? WHERE user_id = ?", (status, user_id))
+            await db.execute(
+                "INSERT INTO settings (user_id, notifications) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET notifications = ?",
+                (user_id, status, status)
+            )
             await db.commit()
 
     async def get_user_wallets(self, user_id: int) -> List[Dict]:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
-            async with db.execute("SELECT * FROM wallets WHERE user_id = ?", (user_id,)) as cur:
+            async with db.execute(
+                "SELECT * FROM wallets WHERE user_id = ? ORDER BY is_main DESC, id", 
+                (user_id,)
+            ) as cur:
                 return [dict(row) for row in await cur.fetchall()]
 
-    async def create_wallet(self, user_id: int, name: str, wallet_type: str, is_main: bool = False) -> int:
+    async def create_wallet(self, user_id: int, name: str, wallet_type: str = "main", is_main: bool = False) -> int:
         async with aiosqlite.connect(self.db_path) as db:
             cur = await db.execute(
                 "INSERT INTO wallets (user_id, name, type, is_main) VALUES (?, ?, ?, ?)",
@@ -118,6 +158,9 @@ class Database:
 
     async def delete_wallet(self, wallet_id: int, user_id: int) -> bool:
         async with aiosqlite.connect(self.db_path) as db:
+            # Удаляем операции кошелька
+            await db.execute("DELETE FROM transactions WHERE wallet_id = ?", (wallet_id,))
+            # Удаляем кошелек
             await db.execute("DELETE FROM wallets WHERE id = ? AND user_id = ?", (wallet_id, user_id))
             await db.commit()
             return True
@@ -125,14 +168,23 @@ class Database:
     async def set_main_wallet(self, wallet_id: int, user_id: int):
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("UPDATE wallets SET is_main = FALSE WHERE user_id = ?", (user_id,))
-            await db.execute("UPDATE wallets SET is_main = TRUE WHERE id = ? AND user_id = ?", (wallet_id, user_id))
+            await db.execute(
+                "UPDATE wallets SET is_main = TRUE WHERE id = ? AND user_id = ?", 
+                (wallet_id, user_id)
+            )
             await db.commit()
 
-    async def add_operation(self, user_id: int, wallet_id: int, op_type: str, category: str, amount: float):
+    async def add_transaction(self, user_id: int, wallet_id: int, t_type: str, category: str, amount: float) -> int:
+        """Добавить операцию с date и time"""
+        now = datetime.datetime.now()
+        date_str = now.strftime("%d.%m.%Y")
+        time_str = now.strftime("%H:%M")
+        
         async with aiosqlite.connect(self.db_path) as db:
             cur = await db.execute(
-                "INSERT INTO operations (user_id, wallet_id, type, category, amount) VALUES (?, ?, ?, ?, ?)",
-                (user_id, wallet_id, op_type, category, amount)
+                "INSERT INTO transactions (user_id, wallet_id, type, category, amount, date, time) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, wallet_id, t_type, category, amount, date_str, time_str)
             )
             await db.commit()
             return cur.lastrowid
@@ -140,7 +192,7 @@ class Database:
     async def get_wallet_balance(self, wallet_id: int) -> float:
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
-                "SELECT type, amount FROM operations WHERE wallet_id = ?", (wallet_id,)
+                "SELECT type, amount FROM transactions WHERE wallet_id = ?", (wallet_id,)
             ) as cur:
                 balance = 0.0
                 async for row in cur:
@@ -150,15 +202,17 @@ class Database:
                         balance -= row[1]
                 return balance
 
-    async def get_user_operations(self, user_id: int, limit: int = 20) -> List[Dict]:
+    async def get_user_transactions(self, user_id: int, limit: int = 20) -> List[Dict]:
+        """Получить операции с date, time и wallet_name"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
-                """SELECT o.*, w.name as wallet_name 
-                   FROM operations o 
-                   JOIN wallets w ON o.wallet_id = w.id 
-                   WHERE o.user_id = ? 
-                   ORDER BY o.created_at DESC LIMIT ?""",
+                """SELECT t.*, w.name as wallet_name 
+                   FROM transactions t 
+                   JOIN wallets w ON t.wallet_id = w.id 
+                   WHERE t.user_id = ? 
+                   ORDER BY t.created_at DESC 
+                   LIMIT ?""",
                 (user_id, limit)
             ) as cur:
                 return [dict(row) for row in await cur.fetchall()]
@@ -168,18 +222,23 @@ class Database:
             date_from = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
             
             async with db.execute(
-                """SELECT type, SUM(amount) as total 
-                   FROM operations 
+                """SELECT type, SUM(amount) as total, category 
+                   FROM transactions 
                    WHERE user_id = ? AND created_at > ? 
-                   GROUP BY type""",
+                   GROUP BY type, category""",
                 (user_id, date_from)
             ) as cur:
-                stats = {'income': 0, 'expense': 0}
+                stats = {'income': 0, 'expense': 0, 'categories': {}}
                 async for row in cur:
-                    stats[row[0]] = row[1]
+                    t_type, total, cat = row
+                    if t_type == 'income':
+                        stats['income'] += total
+                    else:
+                        stats['expense'] += total
+                        stats['categories'][cat] = total
                 return stats
 
-    # ========== ADMIN МЕТОДЫ ==========
+    # ========== ADMIN ==========
     
     async def get_all_users(self) -> List[Dict]:
         async with aiosqlite.connect(self.db_path) as db:
@@ -199,5 +258,10 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("SELECT COUNT(*) FROM users WHERE status = 'blocked'") as cur:
                 return (await cur.fetchone())[0]
+
+    async def update_user_status(self, user_id: int, status: str):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("UPDATE users SET status = ? WHERE user_id = ?", (status, user_id))
+            await db.commit()
 
 db = Database()
