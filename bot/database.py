@@ -1,11 +1,11 @@
 import aiosqlite
 import datetime
 from typing import Optional, List, Dict, Any
-from bot.config import DATABASE_NAME, ADMIN_ID
+from bot.config import DATABASE_PATH, ADMIN_ID
 
 class Database:
     def __init__(self):
-        self.db_name = DATABASE_NAME
+        self.db_name = DATABASE_PATH
 
     async def create_tables(self):
         async with aiosqlite.connect(self.db_name) as db:
@@ -233,6 +233,34 @@ class Database:
         async with aiosqlite.connect(self.db_name) as db:
             await db.execute('UPDATE users SET language = ? WHERE telegram_id = ?', (language, telegram_id))
             await db.commit()
+
+    async def delete_wallet(self, wallet_id: int, user_id: int) -> bool:
+        """Delete wallet and all its transactions"""
+        async with aiosqlite.connect(self.db_name) as db:
+            # Check if wallet exists and belongs to user
+            async with db.execute('SELECT id FROM wallets WHERE id = ? AND user_id = ?', (wallet_id, user_id)) as cursor:
+                if not await cursor.fetchone():
+                    return False
+            
+            # Delete wallet (cascade will delete transactions)
+            await db.execute('DELETE FROM wallets WHERE id = ? AND user_id = ?', (wallet_id, user_id))
+            await db.commit()
+            return True
+
+    async def set_main_wallet(self, wallet_id: int, user_id: int) -> bool:
+        """Set wallet as main and reset all others"""
+        async with aiosqlite.connect(self.db_name) as db:
+            # Check if wallet exists and belongs to user
+            async with db.execute('SELECT id FROM wallets WHERE id = ? AND user_id = ?', (wallet_id, user_id)) as cursor:
+                if not await cursor.fetchone():
+                    return False
+            
+            # Reset all wallets to non-main
+            await db.execute('UPDATE wallets SET is_main = FALSE WHERE user_id = ?', (user_id,))
+            # Set selected wallet as main
+            await db.execute('UPDATE wallets SET is_main = TRUE WHERE id = ? AND user_id = ?', (wallet_id, user_id))
+            await db.commit()
+            return True
 
     async def get_user_settings(self, user_id: int) -> Optional[Dict[str, Any]]:
         async with aiosqlite.connect(self.db_name) as db:

@@ -153,7 +153,7 @@ async def select_transaction_wallet(callback: CallbackQuery, state: FSMContext):
     wallet = next((w for w in wallets if w['id'] == wallet_id), None)
     
     if not wallet:
-        await callback.message.edit_text("❌ Кошелек не найден.")
+        await callback.message.edit_text("❌ Кошелек не найден или не принадлежит вам.")
         await state.clear()
         return
     

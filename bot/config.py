@@ -4,12 +4,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
+ADMIN_ID = int(os.getenv("ADMIN_ID", "1265652628"))
+
+# Validate BOT_TOKEN only when running the bot directly
+# This allows Railway to handle missing tokens gracefully
+if __name__ == "__main__" and not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is not set")
 
-ADMIN_ID = 1265652628
-
+# Database configuration
 DATABASE_NAME = "finance_bot.db"
+
+# Railway provides a persistent volume at /app/data
+# Use this path for Railway deployment, fallback to local for development
+import os
+if os.path.exists("/app/data"):
+    DATABASE_PATH = f"/app/data/{DATABASE_NAME}"
+else:
+    DATABASE_PATH = DATABASE_NAME
 
 LANGUAGES = {
     "ru": "Русский",

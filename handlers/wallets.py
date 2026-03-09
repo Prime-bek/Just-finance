@@ -2,6 +2,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+import aiosqlite
 
 from bot.database import db
 from keyboards.wallet_kb import (
@@ -114,22 +115,26 @@ async def set_main_wallet(callback: CallbackQuery):
     wallet_id = int(callback.data.replace("set_main_", ""))
     user_id = callback.from_user.id
     
-    # Update all user's wallets to set is_main = False
-    async with db.db_name as conn:  # This needs to be fixed - should use proper database connection
-        # For now, we'll implement a simple version
-        wallets = await db.get_user_wallets(user_id)
-        
-        # Reset all wallets to non-main
-        for wallet in wallets:
-            if wallet['is_main']:
-                # This would require a new database method to update wallet
-                pass
-        
-        # Set selected wallet as main
-        # This would require a new database method
-        pass
+    # Verify wallet exists and belongs to user
+    wallets = await db.get_user_wallets(user_id)
+    wallet = next((w for w in wallets if w['id'] == wallet_id), None)
     
-    await callback.message.edit_text("✅ Кошелек установлен как основной.")
+    if not wallet:
+        await callback.message.edit_text("❌ Кошелек не найден.")
+        return
+    
+    # Check if already main
+    if wallet['is_main']:
+        await callback.answer("Этот кошелек уже основной.")
+        return
+    
+    # Set wallet as main using database method
+    success = await db.set_main_wallet(wallet_id, user_id)
+    
+    if success:
+        await callback.message.edit_text("✅ Кошелек установлен как основной.")
+    else:
+        await callback.message.edit_text("❌ Не удалось установить кошелек как основной.")
 
 @router.callback_query(F.data.startswith("delete_wallet_"))
 async def delete_wallet_confirmation(callback: CallbackQuery):
@@ -168,14 +173,18 @@ async def confirm_delete_wallet(callback: CallbackQuery):
     await callback.answer()
     
     wallet_id = int(callback.data.replace("confirm_delete_", ""))
+    user_id = callback.from_user.id
     
-    # Delete wallet (this would require a new database method)
-    # For now, we'll just show a message
+    # Delete wallet using database method
+    success = await db.delete_wallet(wallet_id, user_id)
     
-    user = await db.get_user(callback.from_user.id)
+    user = await db.get_user(user_id)
     language = user['language'] if user else 'ru'
     
-    await callback.message.edit_text("✅ Кошелек удален.")
+    if success:
+        await callback.message.edit_text("✅ Кошелек успешно удален.")
+    else:
+        await callback.message.edit_text("❌ Не удалось удалить кошелек.")
 
 @router.callback_query(F.data == "back_to_wallets")
 async def back_to_wallets(callback: CallbackQuery):
