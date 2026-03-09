@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from config import TEXTS, CURRENCIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES, ADMIN_ID
+from config import TEXTS, CURRENCIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES, WALLET_TYPES, ADMIN_ID, get_text, format_amount
 from database import db
 from keyboards import *
 
@@ -12,6 +12,11 @@ router = Router()
 
 # ========== СОСТОЯНИЯ ==========
 class AddOperation(StatesGroup):
+    # ✅ ИСПРАВЛЕНО: правильная последовательность
+    # 1. select_type (через callback)
+    # 2. select_category (через callback)
+    # 3. waiting_amount (state)
+    # 4. waiting_wallet (state)
     waiting_amount = State()
     waiting_wallet = State()
 
@@ -19,28 +24,25 @@ class CreateWallet(StatesGroup):
     waiting_name = State()
 
 # ========== ХЕЛПЕРЫ ==========
-def get_text(key: str, lang: str = "ru", **kwargs) -> str:
-    text = TEXTS.get(lang, TEXTS["ru"]).get(key, key)
-    return text.format(**kwargs) if kwargs else text
-
 def get_category_name(cat_key: str, t_type: str, lang: str = "ru") -> str:
-    """Получить название категории на нужном языке"""
     if t_type == "expense":
         cat = EXPENSE_CATEGORIES.get(cat_key, {})
     else:
         cat = INCOME_CATEGORIES.get(cat_key, {})
     return cat.get(f"name_{lang}", cat_key)
 
-def format_amount(amount: float, currency: str) -> str:
-    data = CURRENCIES.get(currency, CURRENCIES["UZS"])
-    formatted = f"{amount:,.0f}".replace(",", " ")
-    return f"{formatted} {data['symbol']}"
-
 async def get_user_data(user_id: int) -> tuple:
-    """Получить язык и валюту пользователя"""
     user = await db.get_or_create_user(user_id)
     settings = await db.get_user_settings(user_id)
     return user.get("language", "ru"), settings.get("currency", "UZS")
+
+async def check_blocked(user_id: int) -> bool:
+    user = await db.get_or_create_user(user_id)
+    return user.get("status") == "blocked"
+
+# ✅ ИСПРАВЛЕНО: проверка админа
+async def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
 
 # ========== СТАРТ ==========
 @router.message(Command("start"))
@@ -52,7 +54,7 @@ async def cmd_start(message: Message, state: FSMContext):
         message.from_user.full_name
     )
     
-    if user["status"] == "blocked":
+    if user.get("status") == "blocked":
         await message.answer(get_text("user_blocked", user.get("language", "ru")))
         return
     
@@ -90,6 +92,9 @@ async def back_menu_cb(callback: CallbackQuery, state: FSMContext):
 # ========== БАЛАНС ==========
 @router.message(F.text.in_([TEXTS["ru"]["balance"], TEXTS["uz"]["balance"]]))
 async def show_balance(message: Message):
+    if await check_blocked(message.from_user.id):
+        return
+    
     lang, currency = await get_user_data(message.from_user.id)
     
     wallets = await db.get_user_wallets(message.from_user.id)
@@ -115,8 +120,11 @@ async def show_balance(message: Message):
 # ========== ДОБАВЛЕНИЕ ОПЕРАЦИИ ==========
 @router.message(F.text.in_([TEXTS["ru"]["add_operation"], TEXTS["uz"]["add_operation"]]))
 async def add_operation_start(message: Message, state: FSMContext):
+    if await check_blocked(message.from_user.id):
+        return
+    
     lang, _ = await get_user_data(message.from_user.id)
-    await state.set_state(AddOperation.waiting_amount)
+    # ✅ ИСПРАВЛЕНО: убран set_state, просто показываем выбор типа
     await state.update_data(step="select_type")
     await message.answer(get_text("select_operation_type", lang), reply_markup=get_operation_types_kb(lang))
 
@@ -136,8 +144,7 @@ async def select_income_cat(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("cat_"))
 async def select_category(callback: CallbackQuery, state: FSMContext):
-    data = callback.data
-    cat_key = data.replace("cat_exp_", "").replace("cat_inc_", "")
+    cat_key = callback.data.replace("cat_exp_", "").replace("cat_inc_", "")
     state_data = await state.get_data()
     op_type = state_data.get("op_type")
     
@@ -176,8 +183,8 @@ async def save_operation(callback: CallbackQuery, state: FSMContext):
     wallet_id = int(callback.data.replace("selwallet_", ""))
     data = await state.get_data()
     
-    # Сохраняем операцию
-    await db.add_transaction(
+    # ✅ ИСПРАВЛЕНО: получаем date/time из результата add_transaction
+    result = await db.add_transaction(
         callback.from_user.id,
         wallet_id,
         data["op_type"],
@@ -188,7 +195,6 @@ async def save_operation(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     lang, currency = await get_user_data(callback.from_user.id)
     
-    # Получаем данные для отображения
     wallets = await db.get_user_wallets(callback.from_user.id)
     wallet = next((w for w in wallets if w["id"] == wallet_id), None)
     wallet_name = wallet["name"] if wallet else "?"
@@ -196,19 +202,14 @@ async def save_operation(callback: CallbackQuery, state: FSMContext):
     cat_name = get_category_name(data["category"], data["op_type"], lang)
     type_name = get_text("expense" if data["op_type"] == "expense" else "income", lang)
     
-    # Текущая дата и время
-    from datetime import datetime
-    now = datetime.now()
-    date_str = now.strftime("%d.%m.%Y")
-    time_str = now.strftime("%H:%M")
-    
+    # ✅ ИСПРАВЛЕНО: используем date/time из БД
     text = get_text("operation_added", lang,
                    type=type_name,
                    category=cat_name,
                    amount=format_amount(data["amount"], currency),
                    wallet=wallet_name,
-                   date=date_str,
-                   time=time_str)
+                   date=result["date"],
+                   time=result["time"])
     
     await callback.message.delete()
     await callback.message.answer(text, reply_markup=get_main_menu(lang))
@@ -225,6 +226,9 @@ async def cancel_operation(callback: CallbackQuery, state: FSMContext):
 # ========== ИСТОРИЯ ==========
 @router.message(F.text.in_([TEXTS["ru"]["history"], TEXTS["uz"]["history"]]))
 async def show_history(message: Message):
+    if await check_blocked(message.from_user.id):
+        return
+    
     lang, currency = await get_user_data(message.from_user.id)
     
     transactions = await db.get_user_transactions(message.from_user.id, 20)
@@ -251,6 +255,9 @@ async def show_history(message: Message):
 # ========== СТАТИСТИКА ==========
 @router.message(F.text.in_([TEXTS["ru"]["statistics"], TEXTS["uz"]["statistics"]]))
 async def show_statistics(message: Message):
+    if await check_blocked(message.from_user.id):
+        return
+    
     lang, currency = await get_user_data(message.from_user.id)
     
     stats = await db.get_user_stats(message.from_user.id, 30)
@@ -271,11 +278,13 @@ async def show_statistics(message: Message):
 # ========== КОШЕЛЬКИ ==========
 @router.message(F.text.in_([TEXTS["ru"]["wallets"], TEXTS["uz"]["wallets"]]))
 async def show_wallets(message: Message):
+    if await check_blocked(message.from_user.id):
+        return
+    
     lang, currency = await get_user_data(message.from_user.id)
     
     wallets = await db.get_user_wallets(message.from_user.id)
     
-    # Формируем текст с балансами
     text_lines = [get_text("wallets_title", lang), ""]
     for i, w in enumerate(wallets, 1):
         balance = await db.get_wallet_balance(w["id"])
@@ -303,6 +312,12 @@ async def create_wallet_finish(message: Message, state: FSMContext):
     name = message.text.strip()
     if len(name) > 50:
         name = name[:50]
+    
+    # ✅ ИСПРАВЛЕНО: проверка на дубликат
+    existing = await db.get_wallet_by_name(message.from_user.id, name)
+    if existing:
+        await message.answer(get_text("wallet_exists", lang))
+        return
     
     # Определяем тип по эмодзи
     wallet_type = "main"
@@ -373,7 +388,7 @@ async def delete_wallet_menu(callback: CallbackQuery):
     wallets = await db.get_user_wallets(callback.from_user.id)
     
     if len(wallets) <= 1:
-        await callback.answer("Нельзя удалить последний кошелек!" if lang == "ru" else "Oxirgi hamyonni o'chirib bo'lmaydi!", show_alert=True)
+        await callback.answer(get_text("cannot_delete_last", lang), show_alert=True)
         return
     
     await callback.message.edit_text(
@@ -402,9 +417,15 @@ async def confirm_delete_wallet(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("delwallet_"))
 async def delete_wallet(callback: CallbackQuery):
     wallet_id = int(callback.data.replace("delwallet_", ""))
-    await db.delete_wallet(wallet_id, callback.from_user.id)
+    result = await db.delete_wallet(wallet_id, callback.from_user.id)
     
     lang, _ = await get_user_data(callback.from_user.id)
+    
+    if not result["success"]:
+        error_key = result["error"]  # cannot_delete_main или cannot_delete_last
+        await callback.answer(get_text(error_key, lang), show_alert=True)
+        return
+    
     await callback.answer(get_text("wallet_deleted", lang), show_alert=True)
     
     wallets = await db.get_user_wallets(callback.from_user.id)
@@ -413,6 +434,9 @@ async def delete_wallet(callback: CallbackQuery):
 # ========== НАСТРОЙКИ ==========
 @router.message(F.text.in_([TEXTS["ru"]["settings"], TEXTS["uz"]["settings"]]))
 async def show_settings(message: Message):
+    if await check_blocked(message.from_user.id):
+        return
+    
     lang, currency = await get_user_data(message.from_user.id)
     settings = await db.get_user_settings(message.from_user.id)
     
@@ -476,7 +500,7 @@ async def back_settings(callback: CallbackQuery):
 # ========== АДМИН ПАНЕЛЬ ==========
 @router.message(Command("admin"))
 async def cmd_admin(message: Message):
-    if message.from_user.id != ADMIN_ID:
+    if not await is_admin(message.from_user.id):
         await message.answer(get_text("no_access", "ru"))
         return
     
@@ -487,8 +511,13 @@ async def cmd_admin(message: Message):
     text = get_text("admin_panel", "ru", total=total, active=active, blocked=blocked)
     await message.answer(text, reply_markup=get_admin_kb())
 
+# ✅ ИСПРАВЛЕНО: добавлена проверка админа во все callback
 @router.callback_query(F.data == "admin_panel")
 async def admin_panel(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     total = len(await db.get_all_users())
     active = await db.get_active_users_count(7)
     blocked = await db.get_blocked_users_count()
@@ -499,12 +528,20 @@ async def admin_panel(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_users")
 async def admin_users(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     users = await db.get_all_users()
     await callback.message.edit_text("👥 Пользователи:", reply_markup=get_users_list_kb(users, 0))
     await callback.answer()
 
 @router.callback_query(F.data.startswith("upage_"))
 async def users_page(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     page = int(callback.data.replace("upage_", ""))
     users = await db.get_all_users()
     await callback.message.edit_text("👥 Пользователи:", reply_markup=get_users_list_kb(users, page))
@@ -512,6 +549,10 @@ async def users_page(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("uinfo_"))
 async def user_info(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     user_id = int(callback.data.replace("uinfo_", ""))
     user = await db.get_or_create_user(user_id)
     
@@ -528,6 +569,10 @@ async def user_info(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("block_"))
 async def block_user(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     user_id = int(callback.data.replace("block_", ""))
     await db.update_user_status(user_id, "blocked")
     await callback.answer("Заблокировано", show_alert=True)
@@ -535,6 +580,10 @@ async def block_user(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("unblock_"))
 async def unblock_user(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     user_id = int(callback.data.replace("unblock_", ""))
     await db.update_user_status(user_id, "active")
     await callback.answer("Разблокировано", show_alert=True)
@@ -542,6 +591,10 @@ async def unblock_user(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_blocked")
 async def admin_blocked(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     users = [u for u in await db.get_all_users() if u["status"] == "blocked"]
     if not users:
         await callback.answer("Нет заблокированных", show_alert=True)
@@ -551,6 +604,10 @@ async def admin_blocked(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: CallbackQuery):
+    if not await is_admin(callback.from_user.id):
+        await callback.answer(get_text("no_access", "ru"), show_alert=True)
+        return
+    
     users = await db.get_all_users()
     active_7 = await db.get_active_users_count(7)
     active_30 = await db.get_active_users_count(30)

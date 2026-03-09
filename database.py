@@ -1,14 +1,14 @@
 import aiosqlite
 import datetime
-from typing import Optional, List, Dict, Any
-from config import DB_PATH, EXPENSE_CATEGORIES, INCOME_CATEGORIES
+from typing import List, Dict, Any
+from config import DB_PATH
 
 class Database:
     def __init__(self):
         self.db_path = DB_PATH
 
     async def init(self):
-        """Создание таблиц"""
+        """Создание таблиц с индексами"""
         async with aiosqlite.connect(self.db_path) as db:
             # Пользователи
             await db.execute('''
@@ -63,10 +63,15 @@ class Database:
                 )
             ''')
             
+            # Индексы для скорости
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)')
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_transactions_wallet ON transactions(wallet_id)')
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_users_activity ON users(last_activity)')
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_wallets_user ON wallets(user_id)')
+            
             await db.commit()
 
     async def get_or_create_user(self, user_id: int, username: str = None, name: str = None) -> Dict:
-        """Получить или создать пользователя"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             
@@ -74,17 +79,11 @@ class Database:
                 user = await cur.fetchone()
             
             if not user:
-                # Создаем пользователя
                 await db.execute(
                     "INSERT INTO users (user_id, username, name) VALUES (?, ?, ?)",
                     (user_id, username, name)
                 )
-                # Создаем настройки
-                await db.execute(
-                    "INSERT INTO settings (user_id) VALUES (?)",
-                    (user_id,)
-                )
-                # Создаем основной кошелек
+                await db.execute("INSERT INTO settings (user_id) VALUES (?)", (user_id,))
                 await db.execute(
                     "INSERT INTO wallets (user_id, name, type, is_main) VALUES (?, ?, ?, ?)",
                     (user_id, "💳 Основной", "main", True)
@@ -94,7 +93,6 @@ class Database:
                 async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cur:
                     user = await cur.fetchone()
             else:
-                # Обновляем активность
                 await db.execute(
                     "UPDATE users SET last_activity = ? WHERE user_id = ?",
                     (datetime.datetime.now(), user_id)
@@ -104,21 +102,24 @@ class Database:
             return dict(user)
 
     async def get_user_settings(self, user_id: int) -> Dict:
-        """Получить настройки пользователя"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM settings WHERE user_id = ?", (user_id,)) as cur:
                 row = await cur.fetchone()
                 if row:
                     return dict(row)
-                # Создаем настройки если нет
                 await db.execute("INSERT INTO settings (user_id) VALUES (?)", (user_id,))
                 await db.commit()
                 return {"user_id": user_id, "currency": "UZS", "notifications": True}
 
+    # ✅ ИСПРАВЛЕНО: добавлен async with
     async def update_language(self, user_id: int, language: str):
-        await db.execute("UPDATE users SET language = ? WHERE user_id = ?", (language, user_id))
-        await db.commit()
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                "UPDATE users SET language = ? WHERE user_id = ?",
+                (language, user_id)
+            )
+            await db.commit()
 
     async def update_currency(self, user_id: int, currency: str):
         async with aiosqlite.connect(self.db_path) as db:
@@ -126,15 +127,6 @@ class Database:
                 "INSERT INTO settings (user_id, currency) VALUES (?, ?) "
                 "ON CONFLICT(user_id) DO UPDATE SET currency = ?",
                 (user_id, currency, currency)
-            )
-            await db.commit()
-
-    async def update_notifications(self, user_id: int, status: bool):
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "INSERT INTO settings (user_id, notifications) VALUES (?, ?) "
-                "ON CONFLICT(user_id) DO UPDATE SET notifications = ?",
-                (user_id, status, status)
             )
             await db.commit()
 
@@ -147,6 +139,17 @@ class Database:
             ) as cur:
                 return [dict(row) for row in await cur.fetchall()]
 
+    async def get_wallet_by_name(self, user_id: int, name: str) -> Optional[Dict]:
+        """Проверка существования кошелька по имени"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM wallets WHERE user_id = ? AND name = ?",
+                (user_id, name)
+            ) as cur:
+                row = await cur.fetchone()
+                return dict(row) if row else None
+
     async def create_wallet(self, user_id: int, name: str, wallet_type: str = "main", is_main: bool = False) -> int:
         async with aiosqlite.connect(self.db_path) as db:
             cur = await db.execute(
@@ -156,14 +159,37 @@ class Database:
             await db.commit()
             return cur.lastrowid
 
-    async def delete_wallet(self, wallet_id: int, user_id: int) -> bool:
+    async def delete_wallet(self, wallet_id: int, user_id: int) -> Dict[str, Any]:
+        """
+        Удаляет кошелек с проверками.
+        Возвращает: {"success": bool, "error": str|None}
+        """
         async with aiosqlite.connect(self.db_path) as db:
-            # Удаляем операции кошелька
+            # Проверяем существование и права
+            async with db.execute(
+                "SELECT is_main FROM wallets WHERE id = ? AND user_id = ?",
+                (wallet_id, user_id)
+            ) as cur:
+                row = await cur.fetchone()
+                if not row:
+                    return {"success": False, "error": "wallet_not_found"}
+                
+                if row[0]:  # is_main = True
+                    return {"success": False, "error": "cannot_delete_main"}
+            
+            # Проверяем количество кошельков
+            async with db.execute(
+                "SELECT COUNT(*) FROM wallets WHERE user_id = ?", (user_id,)
+            ) as cur:
+                count = (await cur.fetchone())[0]
+                if count <= 1:
+                    return {"success": False, "error": "cannot_delete_last"}
+            
+            # Удаляем операции и кошелек
             await db.execute("DELETE FROM transactions WHERE wallet_id = ?", (wallet_id,))
-            # Удаляем кошелек
             await db.execute("DELETE FROM wallets WHERE id = ? AND user_id = ?", (wallet_id, user_id))
             await db.commit()
-            return True
+            return {"success": True, "error": None}
 
     async def set_main_wallet(self, wallet_id: int, user_id: int):
         async with aiosqlite.connect(self.db_path) as db:
@@ -174,8 +200,8 @@ class Database:
             )
             await db.commit()
 
-    async def add_transaction(self, user_id: int, wallet_id: int, t_type: str, category: str, amount: float) -> int:
-        """Добавить операцию с date и time"""
+    async def add_transaction(self, user_id: int, wallet_id: int, t_type: str, category: str, amount: float) -> Dict:
+        """Добавить операцию и вернуть данные"""
         now = datetime.datetime.now()
         date_str = now.strftime("%d.%m.%Y")
         time_str = now.strftime("%H:%M")
@@ -187,23 +213,28 @@ class Database:
                 (user_id, wallet_id, t_type, category, amount, date_str, time_str)
             )
             await db.commit()
-            return cur.lastrowid
+            
+            return {
+                "id": cur.lastrowid,
+                "date": date_str,
+                "time": time_str
+            }
 
+    # ✅ ИСПРАВЛЕНО: быстрый SQL для баланса
     async def get_wallet_balance(self, wallet_id: int) -> float:
         async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT type, amount FROM transactions WHERE wallet_id = ?", (wallet_id,)
-            ) as cur:
-                balance = 0.0
-                async for row in cur:
-                    if row[0] == 'income':
-                        balance += row[1]
-                    else:
-                        balance -= row[1]
-                return balance
+            async with db.execute("""
+                SELECT COALESCE(SUM(CASE 
+                    WHEN type='income' THEN amount 
+                    ELSE -amount 
+                END), 0)
+                FROM transactions
+                WHERE wallet_id = ?
+            """, (wallet_id,)) as cur:
+                result = await cur.fetchone()
+                return float(result[0]) if result else 0.0
 
     async def get_user_transactions(self, user_id: int, limit: int = 20) -> List[Dict]:
-        """Получить операции с date, time и wallet_name"""
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(
@@ -228,14 +259,14 @@ class Database:
                    GROUP BY type, category""",
                 (user_id, date_from)
             ) as cur:
-                stats = {'income': 0, 'expense': 0, 'categories': {}}
+                stats = {'income': 0.0, 'expense': 0.0, 'categories': {}}
                 async for row in cur:
                     t_type, total, cat = row
                     if t_type == 'income':
-                        stats['income'] += total
+                        stats['income'] += float(total)
                     else:
-                        stats['expense'] += total
-                        stats['categories'][cat] = total
+                        stats['expense'] += float(total)
+                        stats['categories'][cat] = float(total)
                 return stats
 
     # ========== ADMIN ==========

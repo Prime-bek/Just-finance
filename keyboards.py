@@ -41,7 +41,6 @@ def get_income_categories_kb(lang: str = "ru") -> InlineKeyboardMarkup:
     return kb.adjust(2).as_markup()
 
 def get_wallets_kb(wallets: list, lang: str = "ru", for_selection: bool = False) -> InlineKeyboardMarkup:
-    """Если for_selection=True - для выбора кошелька при операции"""
     kb = InlineKeyboardBuilder()
     for i, w in enumerate(wallets, 1):
         emoji = "⭐" if w["is_main"] else "💳"
@@ -73,7 +72,6 @@ def get_delete_wallet_confirmation_kb(wallet_id: int, lang: str = "ru") -> Inlin
     return kb.adjust(2).as_markup()
 
 def get_delete_wallet_list_kb(wallets: list, lang: str = "ru") -> InlineKeyboardMarkup:
-    """Список кошельков для удаления"""
     kb = InlineKeyboardBuilder()
     for w in wallets:
         kb.add(InlineKeyboardButton(text=f"🗑 {w['name']}", callback_data=f"conf_del_wallet_{w['id']}"))

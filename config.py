@@ -63,7 +63,6 @@ TEXTS = {
         "welcome": "👋 Добро пожаловать в <b>Finance Tracker</b>!\n\nЯ помогу вам учитывать доходы и расходы, управлять кошельками и следить за финансами.\n\nВыберите язык:",
         "menu": "📋 <b>Главное меню</b>\n\nВыберите действие:",
         
-        # Главное меню
         "balance": "📊 Мой баланс",
         "add_operation": "➕ Добавить операцию",
         "history": "📋 История операций",
@@ -71,7 +70,6 @@ TEXTS = {
         "wallets": "💳 Кошельки",
         "settings": "⚙️ Настройки",
         
-        # Операции
         "select_operation_type": "💰 <b>Выберите тип операции</b>",
         "expense": "💸 Расход",
         "income": "💰 Доход",
@@ -79,21 +77,13 @@ TEXTS = {
         "enter_amount": "💵 <b>Введите сумму</b>\n\nПример: 15000",
         "invalid_amount": "❌ <b>Неверная сумма</b>\n\nПожалуйста, введите число больше 0",
         "select_wallet": "💳 <b>Выберите кошелек</b>",
-        "operation_added": "✅ <b>Операция добавлена!</b>\n\n"
-                          "📌 Тип: {type}\n"
-                          "📂 Категория: {category}\n"
-                          "💵 Сумма: {amount}\n"
-                          "💳 Кошелек: {wallet}\n"
-                          "📅 Дата: {date}\n"
-                          "⏰ Время: {time}",
+        "operation_added": "✅ <b>Операция добавлена!</b>\n\n📌 Тип: {type}\n📂 Категория: {category}\n💵 Сумма: {amount}\n💳 Кошелек: {wallet}\n📅 Дата: {date}\n⏰ Время: {time}",
         "operation_cancelled": "❌ Операция отменена",
         
-        # Баланс
         "your_balance": "💰 <b>Ваши кошельки</b>",
         "total_balance": "\n📊 <b>Общий баланс:</b> {amount}",
         "no_wallets": "❌ У вас пока нет кошельков\n\nСоздайте кошелек в разделе «Кошельки»",
         
-        # Кошельки
         "wallets_title": "💳 <b>Ваши кошельки</b>\n\nНажмите на кошелек для управления:",
         "wallet_item": "{emoji} <b>{name}</b>\n   💰 Баланс: {amount}\n",
         "add_wallet": "➕ Добавить кошелек",
@@ -102,28 +92,26 @@ TEXTS = {
         "wallet_created": "✅ <b>Кошелек создан!</b>\n\nНазвание: {name}\nТип: {type}",
         "wallet_deleted": "🗑 <b>Кошелек удален</b>",
         "confirm_delete_wallet": "⚠️ <b>Удалить кошелек?</b>\n\n{name}\n\nВсе операции этого кошелька будут удалены!\n\nВы уверены?",
+        "cannot_delete_main": "❌ Нельзя удалить основной кошелек!",
+        "cannot_delete_last": "❌ Нельзя удалить последний кошелек!",
+        "wallet_exists": "❌ Кошелек с таким названием уже существует!",
         "yes": "✅ Да",
         "no": "❌ Нет",
         "set_main": "⭐ Сделать основным",
         "main_wallet_set": "✅ Основной кошелек изменен",
         
-        # История
         "history_title": "📋 <b>История операций</b>\n\nПоследние 20 операций:",
         "no_transactions": "📭 История пуста\n\nДобавьте первую операцию!",
-        "transaction_item": "{emoji} <b>{category}</b> — {amount}\n"
-                          "💳 {wallet}\n"
-                          "📅 {date}  ⏰ {time}\n",
+        "transaction_item": "{emoji} <b>{category}</b> — {amount}\n💳 {wallet}\n📅 {date}  ⏰ {time}\n",
         "expense_emoji": "💸",
         "income_emoji": "💰",
         
-        # Статистика
         "statistics_title": "📈 <b>Финансовая статистика</b>\n\nЗа последние 30 дней:",
         "stats_income": "💰 Доход: {amount}",
         "stats_expense": "💸 Расход: {amount}",
         "stats_balance": "📊 Баланс: {amount}",
         "top_category": "🏆 Топ категория: {category}",
         
-        # Настройки
         "settings_title": "⚙️ <b>Настройки</b>",
         "settings_menu": "🌐 Язык: {language}\n💱 Валюта: {currency}\n🔔 Напоминания: {notifications}",
         "select_language": "🌐 <b>Выберите язык</b>",
@@ -134,18 +122,13 @@ TEXTS = {
         "notifications_off": "🔕 Выключены",
         "manage_wallets": "💳 Управление кошельками",
         
-        # Админ
-        "admin_panel": "🔐 <b>Админ-панель</b>\n\n"
-                      "👥 Всего пользователей: {total}\n"
-                      "⚡ Активные (7дн): {active}\n"
-                      "🔒 Заблокировано: {blocked}",
+        "admin_panel": "🔐 <b>Админ-панель</b>\n\n👥 Всего пользователей: {total}\n⚡ Активные (7дн): {active}\n🔒 Заблокировано: {blocked}",
         "admin_users": "👥 Пользователи",
         "admin_stats": "📊 Статистика",
         "admin_blocked": "🔒 Заблокированные",
         "user_blocked": "❌ Вы заблокированы и не можете использовать бота",
         "no_access": "⛔ Нет доступа",
         
-        # Общее
         "back": "🔙 Назад",
         "cancel": "❌ Отмена",
         "save": "💾 Сохранить",
@@ -157,7 +140,6 @@ TEXTS = {
         "welcome": "👋 <b>Finance Tracker</b>ga xush kelibsiz!\n\nMen sizga daromadlar va xarajatlarni hisoblash, hamyonlarni boshqarish va moliyangizni kuzatishda yordam beraman.\n\nTilni tanlang:",
         "menu": "📋 <b>Asosiy menyu</b>\n\nAmalni tanlang:",
         
-        # Главное меню
         "balance": "📊 Mening balansim",
         "add_operation": "➕ Operatsiya qo'shish",
         "history": "📋 Operatsiyalar tarixi",
@@ -165,7 +147,6 @@ TEXTS = {
         "wallets": "💳 Hamyonlar",
         "settings": "⚙️ Sozlamalar",
         
-        # Операции
         "select_operation_type": "💰 <b>Operatsiya turini tanlang</b>",
         "expense": "💸 Xarajat",
         "income": "💰 Daromad",
@@ -173,21 +154,13 @@ TEXTS = {
         "enter_amount": "💵 <b>Miqdorni kiriting</b>\n\nMisol: 15000",
         "invalid_amount": "❌ <b>Noto'g'ri miqdor</b>\n\nIltimos, 0 dan katta son kiriting",
         "select_wallet": "💳 <b>Hamyonni tanlang</b>",
-        "operation_added": "✅ <b>Operatsiya qo'shildi!</b>\n\n"
-                          "📌 Tur: {type}\n"
-                          "📂 Kategoriya: {category}\n"
-                          "💵 Miqdor: {amount}\n"
-                          "💳 Hamyon: {wallet}\n"
-                          "📅 Sana: {date}\n"
-                          "⏰ Vaqt: {time}",
+        "operation_added": "✅ <b>Operatsiya qo'shildi!</b>\n\n📌 Tur: {type}\n📂 Kategoriya: {category}\n💵 Miqdor: {amount}\n💳 Hamyon: {wallet}\n📅 Sana: {date}\n⏰ Vaqt: {time}",
         "operation_cancelled": "❌ Operatsiya bekor qilindi",
         
-        # Баланс
         "your_balance": "💰 <b>Sizning hamyonlaringiz</b>",
         "total_balance": "\n📊 <b>Umumiy balans:</b> {amount}",
         "no_wallets": "❌ Sizda hali hamyonlar yo'q\n\n«Hamyonlar» bo'limida hamyon yarating",
         
-        # Кошельки
         "wallets_title": "💳 <b>Sizning hamyonlaringiz</b>\n\nBoshqarish uchun hamyonni bosing:",
         "wallet_item": "{emoji} <b>{name}</b>\n   💰 Balans: {amount}\n",
         "add_wallet": "➕ Hamyon qo'shish",
@@ -196,28 +169,26 @@ TEXTS = {
         "wallet_created": "✅ <b>Hamyon yaratildi!</b>\n\nNomi: {name}\nTuri: {type}",
         "wallet_deleted": "🗑 <b>Hamyon o'chirildi</b>",
         "confirm_delete_wallet": "⚠️ <b>Hamyonni o'chirish?</b>\n\n{name}\n\nBu hamyondagi barcha operatsiyalar o'chiriladi!\n\nIshonchingiz komilmi?",
+        "cannot_delete_main": "❌ Asosiy hamyonni o'chirib bo'lmaydi!",
+        "cannot_delete_last": "❌ Oxirgi hamyonni o'chirib bo'lmaydi!",
+        "wallet_exists": "❌ Bunday nomli hamyon allaqachon mavjud!",
         "yes": "✅ Ha",
         "no": "❌ Yo'q",
         "set_main": "⭐ Asosiy qilish",
         "main_wallet_set": "✅ Asosiy hamyon o'zgartirildi",
         
-        # История
         "history_title": "📋 <b>Operatsiyalar tarixi</b>\n\nOxirgi 20 operatsiya:",
         "no_transactions": "📭 Tarix bo'sh\n\nBirinchi operatsiyani qo'shing!",
-        "transaction_item": "{emoji} <b>{category}</b> — {amount}\n"
-                          "💳 {wallet}\n"
-                          "📅 {date}  ⏰ {time}\n",
+        "transaction_item": "{emoji} <b>{category}</b> — {amount}\n💳 {wallet}\n📅 {date}  ⏰ {time}\n",
         "expense_emoji": "💸",
         "income_emoji": "💰",
         
-        # Статистика
         "statistics_title": "📈 <b>Moliyaviy statistika</b>\n\nOxirgi 30 kun uchun:",
         "stats_income": "💰 Daromad: {amount}",
         "stats_expense": "💸 Xarajat: {amount}",
         "stats_balance": "📊 Balans: {amount}",
         "top_category": "🏆 Top kategoriya: {category}",
         
-        # Настройки
         "settings_title": "⚙️ <b>Sozlamalar</b>",
         "settings_menu": "🌐 Til: {language}\n💱 Valyuta: {currency}\n🔔 Eslatmalar: {notifications}",
         "select_language": "🌐 <b>Tilni tanlang</b>",
@@ -228,18 +199,13 @@ TEXTS = {
         "notifications_off": "🔕 O'chirilgan",
         "manage_wallets": "💳 Hamyonlarni boshqarish",
         
-        # Админ
-        "admin_panel": "🔐 <b>Admin panel</b>\n\n"
-                      "👥 Jami foydalanuvchilar: {total}\n"
-                      "⚡ Faol (7kun): {active}\n"
-                      "🔒 Bloklangan: {blocked}",
+        "admin_panel": "🔐 <b>Admin panel</b>\n\n👥 Jami foydalanuvchilar: {total}\n⚡ Faol (7kun): {active}\n🔒 Bloklangan: {blocked}",
         "admin_users": "👥 Foydalanuvchilar",
         "admin_stats": "📊 Statistika",
         "admin_blocked": "🔒 Bloklanganlar",
         "user_blocked": "❌ Siz bloklangansiz va botdan foydalana olmaysiz",
         "no_access": "⛔ Kirish taqiqlangan",
         
-        # Общее
         "back": "🔙 Orqaga",
         "cancel": "❌ Bekor qilish",
         "save": "💾 Saqlash",
@@ -247,3 +213,17 @@ TEXTS = {
         "error": "❌ Xatolik yuz berdi. Qayta urinib ko'ring.",
     }
 }
+
+# Безопасная функция получения текста
+def get_text(key: str, lang: str = "ru", **kwargs) -> str:
+    text = TEXTS.get(lang, TEXTS["ru"]).get(key, key)
+    try:
+        return text.format(**kwargs) if kwargs else text
+    except (KeyError, ValueError):
+        return text
+
+# Форматирование суммы с 2 знаками после запятой
+def format_amount(amount: float, currency: str) -> str:
+    data = CURRENCIES.get(currency, CURRENCIES["UZS"])
+    formatted = f"{amount:,.2f}".replace(",", " ").rstrip("0").rstrip(".")
+    return f"{formatted} {data['symbol']}"
